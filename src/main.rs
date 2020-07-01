@@ -1,5 +1,8 @@
 use specs::prelude::*;
 use std::time::Duration;
+use std::net::TcpListener;
+use std::thread;
+use tungstenite::server::accept;
 
 // A component contains data which is associated with an entity.
 
@@ -55,14 +58,25 @@ fn main() {
     // all Components and Resources that Systems depend on
     dispatcher.setup(&mut world);
 
-    // An entity may or may not contain some component.
-
     world.create_entity().with(Vel(2.0)).with(Pos(0.0)).build();
     world.create_entity().with(Vel(4.0)).with(Pos(1.6)).build();
     world.create_entity().with(Vel(1.5)).with(Pos(5.4)).build();
 
-    // This entity does not have `Vel`, so it won't be dispatched.
-    world.create_entity().with(Pos(2.0)).build();
+    let server = TcpListener::bind("127.0.0.1:3000").unwrap();
+    for stream in server.incoming() {
+        thread::spawn (move || {
+            let mut websocket = accept(stream.unwrap()).unwrap();
+            loop {
+                let msg = websocket.read_message().unwrap();
+
+                // We do not want to send back ping/pong messages.
+                if msg.is_binary() || msg.is_text() {
+                    println!("Message: {}", msg);
+                    websocket.write_message(msg).unwrap();
+                }
+            }
+        });
+    }
 
     // This dispatches all the systems in parallel (but blocking).
     loop {
